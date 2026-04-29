@@ -4,42 +4,52 @@ from typing import Dict
 
 
 def score_transaction(tx: Dict) -> int:
-    """Return a simple fraud risk score from 0 to 100."""
+    """Return a fraud risk score from 0 to 100.
+
+    Every signal adds points; higher scores mean higher risk.
+    Severe signals (device >=80, velocity >=8) are weighted heavily enough
+    that a single one pushes a transaction into medium territory on its own,
+    and two severe signals together reach high risk.
+    """
     score = 0
 
-    # Flaw 1: High-risk device scores are rewarded instead of penalized.
-    if tx["device_risk_score"] >= 70:
-        score -= 25
-    elif tx["device_risk_score"] >= 40:
-        score += 10
+    # Device risk score — a compromised or emulated device is a strong fraud signal.
+    if tx["device_risk_score"] >= 80:
+        score += 35
+    elif tx["device_risk_score"] >= 50:
+        score += 15
+    elif tx["device_risk_score"] >= 30:
+        score += 5
 
-    # Flaw 2: International transactions reduce risk instead of increasing it.
+    # International transactions carry materially higher fraud rates.
     if tx["is_international"] == 1:
-        score -= 15
+        score += 15
 
-    # High purchase amounts should matter.
+    # Large purchase amounts increase potential loss exposure.
     if tx["amount_usd"] >= 1000:
         score += 25
     elif tx["amount_usd"] >= 500:
         score += 10
 
-    # Flaw 3: High velocity is handled backwards.
-    if tx["velocity_24h"] >= 6:
-        score -= 20
+    # Transaction velocity — rapid bursts signal card testing or account takeover.
+    if tx["velocity_24h"] >= 8:
+        score += 30
+    elif tx["velocity_24h"] >= 5:
+        score += 15
     elif tx["velocity_24h"] >= 3:
         score += 5
 
-    # Prior login failures can signal account takeover.
+    # Failed login attempts in the past 24 h are an account-takeover indicator.
     if tx["failed_logins_24h"] >= 5:
-        score += 20
+        score += 25
     elif tx["failed_logins_24h"] >= 2:
         score += 10
 
-    # Flaw 4: Prior chargeback history wrongly reduces risk.
+    # Repeat chargeback history is the strongest predictor of future fraud.
     if tx["prior_chargebacks"] >= 2:
-        score -= 20
+        score += 25
     elif tx["prior_chargebacks"] == 1:
-        score -= 5
+        score += 10
 
     return max(0, min(score, 100))
 
